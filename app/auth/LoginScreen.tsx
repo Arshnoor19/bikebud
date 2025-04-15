@@ -7,16 +7,20 @@ import {
   Alert,
   StyleSheet,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../../config/firebaseConfig";
+import { doc, setDoc, getFirestore } from "firebase/firestore";
 
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isMechanic, setIsMechanic] = useState(false);
+  const db = getFirestore();
 
   // Handle user login
   const handleLogin = async () => {
@@ -27,12 +31,38 @@ export default function LoginScreen() {
 
     setIsLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      // Store user type in Firestore
+      const userRef = doc(
+        db,
+        isMechanic ? "mechanics" : "users",
+        userCredential.user.uid
+      );
+      await setDoc(
+        userRef,
+        {
+          email: email,
+          userType: isMechanic ? "mechanic" : "user",
+          createdAt: new Date(),
+        },
+        { merge: true }
+      );
+
       // Clear form after successful login
       setEmail("");
       setPassword("");
-      // Updated navigation path based on your file structure
-      router.replace("/(tabs)"); // Navigates to the default tab screen (index.tsx)
+
+      // Navigate to appropriate screen based on user type
+      if (isMechanic) {
+        router.replace("/(mechanic)/dashboard"); // Mechanic dashboard
+      } else {
+        router.replace("/(users)/user"); // User home screen
+      }
     } catch (error: any) {
       let errorMessage = "Login failed. Please try again.";
 
@@ -77,6 +107,20 @@ export default function LoginScreen() {
         editable={!isLoading}
       />
 
+      {/* User/Mechanic Toggle */}
+      <View style={styles.toggleContainer}>
+        <Text style={styles.toggleText}>User</Text>
+        <Switch
+          trackColor={{ false: "#767577", true: "#81b0ff" }}
+          thumbColor={isMechanic ? "#007bff" : "#f4f3f4"}
+          ios_backgroundColor="#3e3e3e"
+          onValueChange={() => setIsMechanic(!isMechanic)}
+          value={isMechanic}
+          disabled={isLoading}
+        />
+        <Text style={styles.toggleText}>Mechanic</Text>
+      </View>
+
       <TouchableOpacity
         style={[styles.button, isLoading && styles.buttonDisabled]}
         onPress={handleLogin}
@@ -85,7 +129,9 @@ export default function LoginScreen() {
         {isLoading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>Login</Text>
+          <Text style={styles.buttonText}>
+            Login as {isMechanic ? "Mechanic" : "User"}
+          </Text>
         )}
       </TouchableOpacity>
 
@@ -101,7 +147,7 @@ export default function LoginScreen() {
   );
 }
 
-// Styles for the screen
+// Updated styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -114,6 +160,15 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 20,
+  },
+  toggleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  toggleText: {
+    marginHorizontal: 10,
+    fontSize: 16,
   },
   input: {
     width: "100%",

@@ -7,19 +7,32 @@ import {
   Alert,
   StyleSheet,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../config/firebaseConfig";
+import { auth, db } from "../../config/firebaseConfig"; // Make sure db is exported from firebaseConfig
 import { useRouter } from "expo-router";
+import { doc, setDoc } from "firebase/firestore";
 
 const SignUpScreen = () => {
+  // State management for form fields and loading state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isMechanic, setIsMechanic] = useState(false); // Toggle between user/mechanic
   const router = useRouter();
 
+  /**
+   * Handles the sign-up process with validation
+   * 1. Validates all fields are filled
+   * 2. Checks password match
+   * 3. Enforces password length
+   * 4. Creates user in Firebase Auth
+   * 5. Stores additional user data in Firestore
+   */
   const handleSignUp = async () => {
+    // Field validation
     if (!email || !password || !confirmPassword) {
       Alert.alert("Error", "Please fill in all fields");
       return;
@@ -37,13 +50,38 @@ const SignUpScreen = () => {
 
     setIsLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      Alert.alert("Success", "Account created successfully!");
+      // Create user in Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      // Store additional user data in Firestore
+      const userRef = doc(
+        db,
+        isMechanic ? "mechanics" : "users",
+        userCredential.user.uid
+      );
+      await setDoc(userRef, {
+        email: email,
+        userType: isMechanic ? "mechanic" : "user",
+        createdAt: new Date(),
+      });
+
+      // Clear form and navigate
       setEmail("");
       setPassword("");
       setConfirmPassword("");
-      router.replace("/auth/LoginScreen"); // Use absolute path
+
+      // Navigate based on user type
+      if (isMechanic) {
+        router.replace("/(mechanic)/dashboard"); // Mechanic dashboard
+      } else {
+        router.replace("/(users)/user"); // Updated to match your user.tsx file
+      }
     } catch (error: any) {
+      // Error handling with specific messages
       let errorMessage = "Sign-up failed. Please try again.";
 
       if (error.code === "auth/email-already-in-use") {
@@ -64,6 +102,21 @@ const SignUpScreen = () => {
     <View style={styles.container}>
       <Text style={styles.title}>Create Account</Text>
 
+      {/* User/Mechanic Toggle */}
+      <View style={styles.toggleContainer}>
+        <Text style={styles.toggleText}>User</Text>
+        <Switch
+          trackColor={{ false: "#767577", true: "#81b0ff" }}
+          thumbColor={isMechanic ? "#007bff" : "#f4f3f4"}
+          ios_backgroundColor="#3e3e3e"
+          onValueChange={() => setIsMechanic(!isMechanic)}
+          value={isMechanic}
+          disabled={isLoading}
+        />
+        <Text style={styles.toggleText}>Mechanic</Text>
+      </View>
+
+      {/* Email Input */}
       <TextInput
         placeholder="Email"
         value={email}
@@ -75,6 +128,7 @@ const SignUpScreen = () => {
         editable={!isLoading}
       />
 
+      {/* Password Input */}
       <TextInput
         placeholder="Password (min 6 characters)"
         secureTextEntry
@@ -84,6 +138,7 @@ const SignUpScreen = () => {
         editable={!isLoading}
       />
 
+      {/* Confirm Password Input */}
       <TextInput
         placeholder="Confirm Password"
         secureTextEntry
@@ -93,6 +148,7 @@ const SignUpScreen = () => {
         editable={!isLoading}
       />
 
+      {/* Sign Up Button */}
       <TouchableOpacity
         onPress={handleSignUp}
         style={[styles.button, isLoading && styles.buttonDisabled]}
@@ -101,10 +157,13 @@ const SignUpScreen = () => {
         {isLoading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>Sign Up</Text>
+          <Text style={styles.buttonText}>
+            Sign Up as {isMechanic ? "Mechanic" : "User"}
+          </Text>
         )}
       </TouchableOpacity>
 
+      {/* Login Link */}
       <TouchableOpacity
         onPress={() => router.push("/auth/LoginScreen")}
         style={styles.linkContainer}
@@ -118,6 +177,7 @@ const SignUpScreen = () => {
   );
 };
 
+// Stylesheet for consistent styling
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -130,6 +190,16 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 20,
     textAlign: "center",
+  },
+  toggleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  toggleText: {
+    marginHorizontal: 10,
+    fontSize: 16,
   },
   input: {
     borderWidth: 1,
@@ -144,6 +214,7 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 8,
     marginTop: 10,
+    alignItems: "center",
   },
   buttonDisabled: {
     backgroundColor: "#cccccc",
